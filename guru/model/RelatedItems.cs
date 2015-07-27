@@ -132,21 +132,77 @@ namespace Guru
 			items.Add( item );
 			itemByIdMap.Add(item.Id, item);
 		}
-		
-		public void addDependency(Item item, Item dependency)
+
+        //  Returns true of there is a chain of dependencies
+        //  item1 on A on B on C on ... on Z on item2
+        public bool itemIsTransitivelyDependent(Item item1, Item item2)
+        {
+            var dependencies = new HashSet<Item>();
+            var itemsToExplore = new HashSet<Item>();
+            itemsToExplore.Add(item1);
+
+            while (itemsToExplore.Count > 0)
+            {
+                foreach (var i in itemsToExplore)
+                    dependencies.Add(i);
+
+                var newItemsToExplore = new HashSet<Item>();
+
+                foreach (var i in itemsToExplore)
+                {
+                    if (i == item2)
+                        return true;
+
+                    if (dependencyMap.ContainsKey(i))
+                    {
+                        var deps = dependencyMap[i];
+                        foreach (var dep in deps)
+                        {
+                            if (!dependencies.Contains(dep))
+                                newItemsToExplore.Add(dep);
+                        }
+                    }
+                }
+
+                itemsToExplore = newItemsToExplore;
+            }
+
+            return false;
+        }
+
+		public bool addDependency(Item item, Item dependency)
 		{
+            //  First determine if this would cause a circular dependency
+            if (itemIsTransitivelyDependent(dependency, item))
+                throw new CircularDependencyException();
+
 			if ( !dependencyMap.ContainsKey(item) ) {
 				dependencyMap[item] = new HashSet<Item>();
 			}
 			
 			var deps = dependencyMap[item];
 			if (deps.Contains(dependency))
-				return;
+				return true;
 			
 			deps.Add(dependency);
+            return false;
 		}
-		
-		public List<Item> getFreeItems()
+
+
+        public bool removeDependency(Item item, Item dependency)
+        {            
+            if (!dependencyMap.ContainsKey(item))
+                return false;
+
+            var deps = dependencyMap[item];
+            if (!deps.Contains(dependency))
+                return false;
+
+            deps.Remove(dependency);
+            return true;
+        }
+
+        public List<Item> getFreeItems()
 		{
 			var freeItems = items
 				.Where( 	i => !this.itemHasIncopmleteDependencies(i) );
@@ -177,7 +233,7 @@ namespace Guru
 		}
 		
 		
-		private bool itemHasIncopmleteDependencies(Item item)
+		public bool itemHasIncopmleteDependencies(Item item)
 		{
 			if (!dependencyMap.ContainsKey( item ) )
 				return false;
@@ -195,7 +251,13 @@ namespace Guru
 		
 		public Item getItemById(UInt64 id)
 		{
-			return itemByIdMap[id];
+            Item item;
+            if (itemByIdMap.TryGetValue(id, out item))
+                return item;
+            else
+                return null;
+
+//			return itemByIdMap[id];
 		}
 		
 		
@@ -225,4 +287,9 @@ namespace Guru
 		}
 		
 	}
+
+    class CircularDependencyException : Exception
+    {
+
+    }
 }

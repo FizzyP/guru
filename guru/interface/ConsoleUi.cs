@@ -9,8 +9,11 @@ namespace Guru
 	class ConsoleUi
 	{
 		const string DefaultItemGroupFilePath = "fizzy.guru";
+        const string kPromptSymbol = "> ";
+        const string kMenuPromptSymbol = ">> ";
 
-		public void parseArgs(string[] args)
+
+        public void parseArgs(string[] args)
 		{
 			if (args.Length == 0) {
 				handleEmptyArgs();
@@ -36,38 +39,56 @@ namespace Guru
                         return;
                     }
 
-                case "add": {
+                case "add":
+                case "a":
+                    {
                         idx++;
                         parseAddCommand(args, ref idx);
                         return;
                     }
 
-                case "rename": {
+                case "remove":
+                case "rm":
+                    {
+                        idx++;
+                        parseRemoveCommand(args, ref idx);
+                        return;
+                    }
+
+                case "rename":
+                case "rn":
+                    {
                         idx++;
                         parseRenameCommand(args, ref idx);
                         return;
                     }
 
-                case "list": {
+                case "list":
+                case "l":
+                {
 					idx++;
                     parseListCommand(args, ref idx);
 					return;
 				}
 
                 case "tree":
+                case "t":
                 {
                     idx++;
                     parseTreeCommand(args, ref idx);
                     return;
                 }
 
-                case "skip": {
+                case "skip":
+                case "s":
+                {
 					idx++;
 					handleSkipCommand(args, ref idx);
 					return;
 				}
 
                 case "done":
+                case "d":
                 {
                     idx++;
                     handleDoneCommand(args, ref idx);
@@ -75,6 +96,7 @@ namespace Guru
                 }
 
                 case "comment":
+                case "c":
                 {
                     idx++;
                     handleCommentCommand(args, ref idx);
@@ -87,7 +109,7 @@ namespace Guru
 						//	Queries
 						if (args[0][0] == '?') {
 							idx++;
-							handleQuery(args[0].Substring(1), args, ref idx);
+							handleQuery(args[0], args, ref idx);
 							return;
 						}
 						else {
@@ -128,7 +150,163 @@ namespace Guru
                 }
                 );
 
-            
+            switch (resultIdx)
+            {
+                case 0:
+                    handleNotInMoodForItem(item);
+                    break;
+                case 1:
+                    handleProcrastinatingOnItem(item);
+                    break;
+                case 2:
+                    handleSomethingElseToBeDoneFirst(item);
+                    break;
+                case 3:
+                    handleItemTooComplicated(item);
+                    break;
+            }
+        }
+
+        void handleNotInMoodForItem(Item item)
+        {
+            Console.WriteLine("Quit whining.  (feature currently unspported).");
+        }
+
+        void handleProcrastinatingOnItem(Item item)
+        {
+            Console.WriteLine("Quit whining.  (feature currently unspported).");
+        }
+
+        void handleSomethingElseToBeDoneFirst(Item item)
+        {
+            Console.WriteLine("What needs to be done first?");
+            Console.WriteLine("Enter an item number, an add command, ? to search, or 'q' to quit.");
+
+            Item item2 = null;
+            while (true)
+            {
+                Console.Write(kMenuPromptSymbol);
+                var input = Console.ReadLine();
+
+                if (input == "q")
+                {
+                    Console.WriteLine("That's what I thought.  Get back to work.");
+                    return;
+                }
+
+                //  See if it's an item number
+                UInt32 item2Id;
+                if (UInt32.TryParse(input, out item2Id))
+                {
+                    item2 = ItemGroup.Items.getItemById(item2Id);
+                    if (item2 == null)
+                    {
+                        Console.WriteLine("There is no item with that number.");
+                        continue;
+                    }
+                    else
+                    {
+                        // generate the dependency when we exit the input loop.
+                        break;
+                    }
+                }
+
+                //  Break into words and see if its add or ?
+                var inputSplit = CommandLineStringSplitter.SplitCommandLine(input).ToArray<String>();
+                if (inputSplit.Length == 0)
+                    continue;
+
+                if (inputSplit[0][0] == '?')
+                {
+                    int idx = 1;
+                    handleQuery(inputSplit[0], inputSplit, ref idx);
+                }
+                else if (inputSplit[0] == "add")
+                {
+                    int idx = 1;
+                    item2 = parseAddCommand(inputSplit, ref idx);
+                    if (item2 == null)
+                        continue;
+
+                    //  If they really created an item then assign it
+                    //  to item2 and generate the dependency when we exit the input loop.
+                    break;
+                }
+            }
+
+            ItemGroup.Items.addDependency(item, item2);
+            printAddDepMethodMessage(item, item2);
+            ItemGroupFile.save();
+        }
+
+        void handleItemTooComplicated(Item item)
+        {
+            Console.WriteLine("Let's break up this item into smaller peices.");
+            Console.WriteLine("Enter an item number to make it a sub-item, use an 'add' to add a bu-item, ? to search, or 'q' to quit.");
+
+            bool didAddSubtask = false;
+
+            Item item2 = null;
+            while (true)
+            {
+                Console.Write(kMenuPromptSymbol);
+                var input = Console.ReadLine();
+
+                if (input == "q")
+                {
+                    if (didAddSubtask)
+                        Console.WriteLine("Congrats!  You have subdivided your task.");
+                    else
+                        Console.WriteLine("Warning: you haven't subdivided your task.");
+
+                    return;
+                }
+
+                //  See if it's an item number
+                UInt32 item2Id;
+                if (UInt32.TryParse(input, out item2Id))
+                {
+                    item2 = ItemGroup.Items.getItemById(item2Id);
+                    if (item2 == null)
+                    {
+                        Console.WriteLine("There is no item with that number.");
+                        continue;
+                    }
+                    else
+                    {
+                        ItemGroup.Items.addDependency(item, item2);
+                        printAddDepMethodMessage(item, item2);
+                        ItemGroupFile.save();
+                        didAddSubtask = true;
+                        continue;
+                    }
+                }
+
+                //  Break into words and see if its add or ?
+                var inputSplit = CommandLineStringSplitter.SplitCommandLine(input).ToArray<String>();
+                if (inputSplit.Length == 0)
+                    continue;
+
+                if (inputSplit[0][0] == '?')
+                {
+                    int idx = 1;
+                    handleQuery(inputSplit[0], inputSplit, ref idx);
+                }
+                else if (inputSplit[0] == "add")
+                {
+                    int idx = 1;
+                    item2 = parseAddCommand(inputSplit, ref idx);
+                    if (item2 == null)
+                        continue;
+
+                    ItemGroup.Items.addDependency(item, item2);
+                    printAddDepMethodMessage(item, item2);
+                    ItemGroupFile.save();
+                    didAddSubtask = true;
+                    continue;
+                }
+            }
+
         }
 
 
@@ -141,6 +319,7 @@ namespace Guru
 
             int result = -1;
             do {
+                Console.Write(kMenuPromptSymbol);
                 var input = Console.ReadLine();
                 try
                 {
@@ -245,6 +424,7 @@ namespace Guru
             }
 
             handleDoneItem(doneItem);
+            handleNextItem();
         }
 
         void handleDoneItem(Item doneItem)
@@ -271,6 +451,8 @@ namespace Guru
 
         void handleQuery(string queryString, string[] args, ref int idx)
 		{
+            queryString = queryString.Substring(1);
+
 			//	No args = print everything
 			if (idx >= args.Length) {
 				printAllItems();
@@ -309,6 +491,7 @@ namespace Guru
         {
             item.Details += comment + System.Environment.NewLine;
             ItemGroupFile.save();
+            Console.WriteLine("Added a comment to " + item);
         }
 
 
@@ -325,6 +508,12 @@ namespace Guru
 					handleDepMethod(item, args, ref idx);
 					return;
 				}
+                case "rmdep":
+                    {
+                        idx++;
+                        handleRmdepMethod(item, args, ref idx);
+                        return;
+                    }
                 case "done":
                 {
                     idx++;
@@ -376,11 +565,17 @@ namespace Guru
 			try {
 				var id = UInt64.Parse( args[idx] );
 				var item2 = ItemGroup.getItemById( id );
-				ItemGroup.Items.addDependency(item, item2);
+                try
+                {
+                    ItemGroup.Items.addDependency(item, item2);
+                }
+                catch (CircularDependencyException ex) {
+                    Console.WriteLine("Making " + item.Id + " dependent on " + item2.Id + " would create a circular dependency.");
+                    return;
+                }
+
                 ItemGroupFile.save();
-				//  Console.WriteLine(item);
-				//  Console.WriteLine(item2);
-				Console.WriteLine("Item #" + item.Id + " is now dependent on item #" + item2.Id + ".");
+                printAddDepMethodMessage(item, item2);
 				return;
 			}
 			catch {
@@ -388,15 +583,50 @@ namespace Guru
 				return;
 			}
 		}
-		
-		void printDepMethodErrorMessage()
+
+        void handleRmdepMethod(Item item, string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                printNodepMethodErrorMessage();
+                return;
+            }
+
+            try
+            {
+                var id = UInt64.Parse(args[idx]);
+                var item2 = ItemGroup.getItemById(id);
+                var didRemove = ItemGroup.Items.removeDependency(item, item2);
+                if (didRemove)
+                    Console.WriteLine("Item #" + item.Id + " is no longer dependent on item #" + item2.Id + ".");
+                else
+                    Console.WriteLine("Item #" + item.Id + " was not dependent on item #" + item2.Id + ".");
+
+                ItemGroupFile.save();
+                return;
+            }
+            catch
+            {
+                printNodepMethodErrorMessage();
+                return;
+            }
+        }
+        void printAddDepMethodMessage(Item item1, Item item2)
+        {
+            Console.WriteLine("Item #" + item1.Id + " is now dependent on item #" + item2.Id + ".");
+        }
+
+        void printDepMethodErrorMessage()
 		{
-//			Console.WriteLine("'dep' method expects the # of the dependency.");
-			Console.WriteLine("Example: guru #1 dep #2");
+			Console.WriteLine("Example: guru 1 dep 2");
 		}
-		
-		
-		void handleEmptyArgs()
+
+        void printNodepMethodErrorMessage()
+        {
+            Console.WriteLine("Example: guru 1 rmdep 2");
+        }
+
+        void handleEmptyArgs()
 		{
 			//	Load it
 			var groupFile = ItemGroupFile;
@@ -429,7 +659,7 @@ namespace Guru
             while (true)
             {
                 Console.WriteLine();
-                Console.Write("> ");
+                Console.Write(kPromptSymbol);
                 command = Console.ReadLine();
                 if (command == "quit" || command == "q")
                     return;
@@ -477,44 +707,63 @@ namespace Guru
 		
 		void parseNextCommand(string[] args, ref int idx)
 		{
-			var nextItem = ItemGroup.Items.getTopItem();
-			if (nextItem != null) {
+            handleNextItem();
+        }
+
+        void handleNextItem()
+        {
+            var nextItem = ItemGroup.Items.getTopItem();
+            if (nextItem != null)
+            {
                 consoleWriteHeader("Next Item");
-				Console.WriteLine( nextItem );
-			}		
-			else {
-				//	There's no task to do!
-				if (ItemGroup.Items.ItemCount == 0) {
-					if (ItemGroup.Items.DoneItemCount == 0) {
-						Console.WriteLine("There are no pending items.");
-					}
-					else {
-						Console.WriteLine("There are no pending items.  All items are done.");
-					}
-				}
-				else {
-					//	There are pending items but they're not "free" which means
-					//	they're tied up in circular dependency.
-					Console.WriteLine("All pending items have unresolved dependencies.");
-				}
-				return;
-			}
-		}
-			
-		#endregion	
+                Console.WriteLine(nextItem.ToDetailedString());
+            }
+            else
+            {
+                //	There's no task to do!
+                if (ItemGroup.Items.ItemCount == 0)
+                {
+                    if (ItemGroup.Items.DoneItemCount == 0)
+                    {
+                        Console.WriteLine("There are no pending items.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("There are no pending items.  All items are done.");
+                    }
+                }
+                else
+                {
+                    //	There are pending items but they're not "free" which means
+                    //	they're tied up in circular dependency.
+                    Console.WriteLine("All pending items have unresolved dependencies.");
+                }
+                return;
+            }
+        }
+
+        #endregion
 
 
+        
+        void parseRemoveCommand(string[] args, ref int idx)
+        {
+            var item = ItemGroup.Items.getTopItem();
+
+            this.ItemGroupFile.save();
+            Console.WriteLine("Removed item " + item);
+            return;
+        }
 
 
-		
-		#region add command
-		
-		void parseAddCommand(string[] args, ref int idx)
+        #region add command
+
+        Item parseAddCommand(string[] args, ref int idx)
 		{
 			if (args.Length <= idx) {
 				Console.WriteLine("Expected description.");
 				displayAddCommandInstructions();
-				return;
+                return null;
 			}
 			var description = args[ idx++ ];
 			
@@ -524,6 +773,7 @@ namespace Guru
 			ItemGroup.Items.addItem( item );
 			this.ItemGroupFile.save();
 			Console.WriteLine("Added item " + item);
+            return item;
 		}
 		
 		void displayAddCommandInstructions()
