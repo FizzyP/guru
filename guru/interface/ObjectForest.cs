@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 
 namespace Guru
 {
-    class ObjectForest
+    class ObjectForest<T>
     {
-        List<ObjectForestNode> Roots = new List<ObjectForestNode>();
+        List<ObjectForestNode<T>> Roots = new List<ObjectForestNode<T>>();
 
         public string getTreeFormattedString()
         {
@@ -20,17 +20,17 @@ namespace Guru
             return builder.ToString();
         }
 
-        public void addRoot(ObjectForestNode node)
+        public void addRoot(ObjectForestNode<T> node)
         {
             Roots.Add(node);
         }
     }
 
 
-    class ObjectForestNode
+    class ObjectForestNode<T>
     {
-        public Object Value;
-        public List<ObjectForestNode> Children = new List<ObjectForestNode>();
+        public T Value;
+        public List<ObjectForestNode<T>> Children = new List<ObjectForestNode<T>>();
 
         public void appendTreeFormattedString(StringBuilder builder, string prefix)
         {

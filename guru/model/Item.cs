@@ -9,7 +9,7 @@ namespace Guru
 		public string Description;
 		public string Details;
 		public bool IsDone = false;
-
+        public double Rank;
 		
         
         		
@@ -17,9 +17,8 @@ namespace Guru
 			this.Id = id;
 			this.Description = description;
 			this.Details = details;
+            this.Rank = 0;
 		}
-		
-//		public Item() {}
 		
 		public void copyFrom(Item item)
 		{
@@ -27,6 +26,7 @@ namespace Guru
 			Description = item.Description;
 			Details = item.Details;
 			IsDone = item.IsDone;
+            Rank = item.Rank;
 		}
 		
 		public override string ToString()

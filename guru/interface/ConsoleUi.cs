@@ -976,7 +976,37 @@ namespace Guru
 
         void handleLowPriority(Item item)
         {
+            double kLowRankWarningThreshold = -2;
+            if (item.Rank < kLowRankWarningThreshold)
+            {
+                consoleWriteHeader("You Keep Deprioritizing This item");
+                var resultIdx = getUserInputFromNumericalMenu(
+                    new string[]
+                    {
+                    "Trust Me",
+                    "I'm just procrastinating",
+                    "I'm never going to do this"
+                    }
+                    );
 
+                switch (resultIdx)
+                {
+                    case 1:
+                        Console.WriteLine("Quit whining.  (feature currently unspported).");
+                        return;
+
+                    case 2:
+                        Console.WriteLine("Quit whining.  (feature currently unspported).");
+                        return;
+
+                    default:
+                        //  Don't do anything.  Fall through to decreasing priority
+                        break;
+                }
+            }
+            ItemGroup.Items.setItemRank(item, item.Rank - 1);
+            ItemGroupFile.save();
+            Console.WriteLine("Decreased the priority of " + item);
         }
 
 

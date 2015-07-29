@@ -39,16 +39,16 @@ namespace Guru
             }
         }
 
-        public ObjectForest getItemsAsForest(HashSet<Item> itemSet)
+        public ObjectForest<Item> getItemsAsForest(HashSet<Item> itemSet)
         {
-            var forest = new ObjectForest();
+            var forest = new ObjectForest<Item>();
 
-            var rootNodes = new HashSet<ObjectForestNode>();
-            var itemToNodeMap = new Dictionary<Item, ObjectForestNode>();
+            var rootNodes = new HashSet<ObjectForestNode<Item>>();
+            var itemToNodeMap = new Dictionary<Item, ObjectForestNode<Item>>();
 
             foreach (var i in itemSet)
             {
-                var node = new ObjectForestNode();
+                var node = new ObjectForestNode<Item>();
                 node.Value = i;
                 rootNodes.Add(node);
                 itemToNodeMap[i] = node;
@@ -76,52 +76,39 @@ namespace Guru
             return forest;
         }
 
-        public ObjectForest getItemsAsForest()
+        public ObjectForest<Item> getItemsAsForest()
         {
             return getItemsAsForest(this.items);
         }
 
-        public ObjectForest getDoneItemsAsForest()
+        public ObjectForest<Item> getDoneItemsAsForest()
         {
             return getItemsAsForest(this.doneItems);
         }
 
-        //public ObjectForest getItemsAsForest()
-        //{
-        //    var forest = new ObjectForest();
+        public void adjustRanksToRespectDependencies()
+        {
+            foreach (var item in items)
+            {
+                adjustRankOfItemToRespectDependencies(item, Double.MinValue);
+            }
+        }
 
-        //    var rootNodes = new HashSet<ObjectForestNode>();
-        //    var itemToNodeMap = new Dictionary<Item, ObjectForestNode>();
+        void adjustRankOfItemToRespectDependencies(Item item, double minRank)
+        {
+            if (item.Rank < minRank)
+            {
+                item.Rank = minRank;
+            }
 
-        //    foreach (var i in items)
-        //    {
-        //        var node = new ObjectForestNode();
-        //        node.Value = i;
-        //        rootNodes.Add(node);
-        //        itemToNodeMap[i] = node;
-        //    }
+            if (!dependencyMap.ContainsKey(item))
+                return;
 
-        //    foreach (var kv in dependencyMap)
-        //    {
-        //        var parent = kv.Key;
-        //        foreach (var item in kv.Value)
-        //        {
-        //            if (!items.Contains(item))
-        //                continue;
-
-        //            var childNode = itemToNodeMap[item];
-        //            itemToNodeMap[parent].Children.Add(childNode);
-        //            //  Remember the child isn't a root
-        //            rootNodes.Remove(childNode);
-        //        }
-        //    }
-
-        //    //  Write the root nodes
-        //    foreach (var root in rootNodes)
-        //        forest.addRoot(root);
-
-        //    return forest;
-        //}
+            foreach (var dep in dependencyMap[item])
+            {
+                adjustRankOfItemToRespectDependencies(dep, minRank);
+            }
+        }
 
 
         public void addItem(Item item)
@@ -205,8 +192,8 @@ namespace Guru
         public List<Item> getFreeItems()
 		{
 			var freeItems = items
-				.Where( 	i => !this.itemHasIncopmleteDependencies(i) );
-//				.OrderBy(	i => i.Id );
+				.Where( 	i => !this.itemHasIncopmleteDependencies(i) )
+				.OrderBy(	i => -i.Rank );
 
 			return freeItems.ToList();
 		}
@@ -248,7 +235,14 @@ namespace Guru
 			return false;
 		}
 		
-		
+
+        public void setItemRank(Item item, double newRank)
+        {
+            item.Rank = newRank;
+            adjustRanksToRespectDependencies();
+        }
+
+
 		public Item getItemById(UInt64 id)
 		{
             Item item;
