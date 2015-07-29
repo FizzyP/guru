@@ -10,16 +10,7 @@ namespace Guru
     {
         static void Main(string[] args)
         {
-
-
-            //			args = new string[] {"?", "Smile" };
-
-            args = new string[] { ">" };
-
-            foreach (var arg in args)
-            {
-                Console.WriteLine(arg);
-            }
+            args = new string[] { "prompt" };
 
             var ui = new ConsoleUi();
             ui.parseArgs(args);

@@ -23,7 +23,9 @@ namespace Guru
 			int idx = 0;
             switch (args[0]) {
 
-                case ">": {
+                case "prompt":
+                case "p":
+                    {
                         enterPromptLoop();
                         break;
                     }
@@ -46,6 +48,23 @@ namespace Guru
                         parseAddCommand(args, ref idx);
                         return;
                     }
+
+                case "chain":
+                case "c":
+                    {
+                        idx++;
+                        parseChainCommand(args, ref idx);
+                        return;
+                    }
+
+                case "group":
+                case "g":
+                    {
+                        idx++;
+                        parseGroupCommand(args, ref idx);
+                        return;
+                    }
+
 
                 case "remove":
                 case "rm":
@@ -96,7 +115,6 @@ namespace Guru
                 }
 
                 case "comment":
-                case "c":
                 {
                     idx++;
                     handleCommentCommand(args, ref idx);
@@ -133,8 +151,651 @@ namespace Guru
 			}
 		}
 
-		void handleSkipCommand(string[] args, ref int idx)
+
+
+        void handleEmptyArgs()
 		{
+			//	Load it
+			var groupFile = ItemGroupFile;
+			
+			if (ItemGroupFileIsNew) {
+				printHelp();
+                ItemGroupFileIsNew = false;
+			}
+			else {
+				int idx = 0;
+				parseNextCommand(new string[0], ref idx);
+			}
+		}
+		
+   
+
+        #region Default Item Group
+
+        ItemGroup ItemGroup {
+			get {
+				return ItemGroupFile.ItemGroup;				
+			}
+		}
+		
+		bool ItemGroupFileIsNew = false;
+		private ItemGroupFile _itemGroupFile;
+		ItemGroupFile ItemGroupFile {
+			get {
+				if (_itemGroupFile == null) {
+					if (File.Exists(DefaultItemGroupFilePath)) {					
+						_itemGroupFile = ItemGroupFile.new_ReadFromPath(DefaultItemGroupFilePath);
+						ItemGroupFileIsNew = false;
+					}
+					else {
+						_itemGroupFile = ItemGroupFile.new_CreateAtPath(DefaultItemGroupFilePath);
+						ItemGroupFileIsNew = true;
+					}
+				}
+				return _itemGroupFile;
+			}
+		}
+
+        #endregion
+
+        #region Utils
+
+        void consoleWriteHeader(string header)
+        {
+            Console.WriteLine("--- " + header + " ---");
+        }
+
+
+
+        int getUserInputFromNumericalMenu(string[] options)
+        {
+            for (int i = 0; i < options.Length; i++)
+            {
+                Console.WriteLine(i + "\t" + options[i]);
+            }
+
+            int result = -1;
+            do
+            {
+                Console.Write(kMenuPromptSymbol);
+                var input = Console.ReadLine();
+                try
+                {
+                    result = (int)UInt32.Parse(input);
+                    if (result < 0 || result >= options.Length)
+                        throw new Exception(); // force us through the same code path as catch block
+
+                    //  Yay something to return!
+                    return result;
+                }
+                catch
+                {
+                    Console.WriteLine("Select an option by typing a number 0..." + (options.Length - 1) + ".");
+                    continue;
+                }
+
+            }
+            while (true);
+
+        }
+
+        #endregion
+
+        #region Help
+
+        void printHelp()
+        {
+            consoleWriteHeader("guru Help");
+            displayAddCommandInstructions();
+            displayChainCommandInstructions();
+        }
+        
+        #endregion
+
+        #region Query
+
+        void handleQuery(string queryString, string[] args, ref int idx)
+        {
+            queryString = queryString.Substring(1);
+
+            //	No args = print everything
+            if (idx >= args.Length)
+            {
+                printAllItems();
+                return;
+            }
+
+            if (queryString == "")
+            {
+                //	Interpret next string as regular expression
+                var regexStr = args[idx];
+                var regex = new Regex(regexStr);
+                var matchingItems = ItemGroup.Items.findItemsWithDescriptionMatchingRegex(regex);
+                consoleWriteHeader("Items with descriptions matching \"" + regexStr + "\"");
+                foreach (var item in matchingItems)
+                {
+                    Console.WriteLine(item);
+                }
+            }
+            else
+            {
+                Console.WriteLine("Unsupported query.");
+            }
+        }
+
+        #endregion
+
+        #region Comment
+
+        void handleCommentCommand(string[] args, ref int idx)
+        {
+            if (args.Length == idx)
+            {
+                Console.WriteLine("Comment command has format: comment \"comment text\"");
+                return;
+            }
+
+            var comment = args[idx];
+            var item = ItemGroup.Items.getTopItem();
+            handleCommentOnItem(item, comment);
+        }
+
+        void handleCommentOnItem(Item item, string comment)
+        {
+            item.Details += comment + System.Environment.NewLine;
+            ItemGroupFile.save();
+            Console.WriteLine("Added a comment to " + item);
+        }
+
+
+        void handleMethodOnItem(Item item, string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                Console.WriteLine(item.ToDetailedString());
+                return;
+            }
+
+            switch (args[idx])
+            {
+                case "dep":
+                    {
+                        idx++;
+                        handleDepMethod(item, args, ref idx);
+                        return;
+                    }
+                case "rmdep":
+                    {
+                        idx++;
+                        handleRmdepMethod(item, args, ref idx);
+                        return;
+                    }
+                case "done":
+                    {
+                        idx++;
+                        handleDoneMethod(item, args, ref idx);
+                        return;
+                    }
+                case "reopen":
+                    {
+                        idx++;
+                        handleReopenMethod(item, args, ref idx);
+                        return;
+                    }
+                default:
+                    {
+                        Console.WriteLine("Unrecognized item method '" + args[idx] + "'.");
+                        return;
+                    }
+            }
+        }
+
+        #endregion
+
+        #region Add/Remove Dependencies
+
+        void handleDepMethod(Item item, string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                printDepMethodErrorMessage();
+                return;
+            }
+
+            try
+            {
+                var id = UInt64.Parse(args[idx]);
+                var item2 = ItemGroup.getItemById(id);
+                addDependency(item, item2);
+                ItemGroupFile.save();
+                return;
+            }
+            catch
+            {
+                printDepMethodErrorMessage();
+                return;
+            }
+        }
+
+        void addDependency(Item item1, Item item2)
+        {
+            try
+            {
+                ItemGroup.Items.addDependency(item1, item2);
+            }
+            catch (CircularDependencyException ex)
+            {
+                Console.WriteLine("Making " + item1.Id + " dependent on " + item2.Id + " would create a circular dependency.");
+                return;
+            }
+            printAddDepMethodMessage(item1, item2);
+        }
+
+        void handleRmdepMethod(Item item, string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                printNodepMethodErrorMessage();
+                return;
+            }
+
+            try
+            {
+                var id = UInt64.Parse(args[idx]);
+                var item2 = ItemGroup.getItemById(id);
+                var didRemove = ItemGroup.Items.removeDependency(item, item2);
+                if (didRemove)
+                    Console.WriteLine("Item #" + item.Id + " is no longer dependent on item #" + item2.Id + ".");
+                else
+                    Console.WriteLine("Item #" + item.Id + " was not dependent on item #" + item2.Id + ".");
+
+                ItemGroupFile.save();
+                return;
+            }
+            catch
+            {
+                printNodepMethodErrorMessage();
+                return;
+            }
+        }
+        void printAddDepMethodMessage(Item item1, Item item2)
+        {
+            Console.WriteLine("Item #" + item1.Id + " is now dependent on item #" + item2.Id + ".");
+        }
+
+        void printDepMethodErrorMessage()
+        {
+            Console.WriteLine("Example: guru 1 dep 2");
+        }
+
+        void printNodepMethodErrorMessage()
+        {
+            Console.WriteLine("Example: guru 1 rmdep 2");
+        }
+
+        #endregion
+
+        #region Prompt
+
+        void enterPromptLoop()
+        {
+            string command;
+            while (true)
+            {
+                Console.WriteLine();
+                Console.Write(kPromptSymbol);
+                command = Console.ReadLine();
+                if (command == "quit" || command == "q")
+                    return;
+
+                //  Split the command up just like the shell would do and pass it to the argument parser
+                string[] splitCommand = CommandLineStringSplitter.SplitCommandLine(command).ToArray();
+                parseArgs(splitCommand);
+            }
+        }
+
+        #endregion
+
+        #region Next
+
+        void parseNextCommand(string[] args, ref int idx)
+		{
+            handleNextItem();
+        }
+
+        void handleNextItem()
+        {
+            var nextItem = ItemGroup.Items.getTopItem();
+            if (nextItem != null)
+            {
+                consoleWriteHeader("Next Item");
+                Console.WriteLine(nextItem.ToDetailedString());
+            }
+            else
+            {
+                //	There's no task to do!
+                if (ItemGroup.Items.ItemCount == 0)
+                {
+                    if (ItemGroup.Items.DoneItemCount == 0)
+                    {
+                        Console.WriteLine("There are no pending items.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("There are no pending items.  All items are done.");
+                    }
+                }
+                else
+                {
+                    //	There are pending items but they're not "free" which means
+                    //	they're tied up in circular dependency.
+                    Console.WriteLine("All pending items have unresolved dependencies.");
+                }
+                return;
+            }
+        }
+
+        #endregion
+
+        #region Remove
+
+        void parseRemoveCommand(string[] args, ref int idx)
+        {
+            //var item = ItemGroup.Items.getTopItem();
+
+            ////  Look for dependencies on this item
+            //var itemsDependentOnThis = new
+            //foreach (var kv in ItemGroup.Items.dependencyMap)
+            //{
+            //    foreach (var i in kv.Value)
+            //    {
+            //        if (i == item)
+            //        {
+            //            Console.WriteLine()
+            //        }
+            //    }
+            //}
+
+            //this.ItemGroupFile.save();
+            //Console.WriteLine("Removed item " + item);
+            //return;
+        }
+#endregion
+
+        #region Add
+
+        Item parseAddCommand(string[] args, ref int idx)
+		{
+			if (args.Length <= idx) {
+				Console.WriteLine("Expected description.");
+				displayAddCommandInstructions();
+                return null;
+			}
+			var description = args[ idx++ ];
+			
+			var newId = ItemGroup.allocateId();
+			var item = new Item( newId, description );
+
+            addItem(item);
+            this.ItemGroupFile.save();
+            return item;
+		}
+
+        void addItem(Item item)
+        {
+            ItemGroup.Items.addItem(item);
+            Console.WriteLine("Added item " + item);
+        }
+
+        void displayAddCommandInstructions()
+		{
+			Console.WriteLine("Command: 'add'");
+			Console.WriteLine("Example: guru add \"Task description\"");
+		}
+
+        #endregion
+
+        #region Chain
+
+        //  If x is a number, finds the task with that id
+        //      returns null if it doesn't exist.
+        //  If x is a string makes a new task with that description
+        Item createOrGetItemFromIdOrString(string x)
+        {
+            Item newItem;
+
+            //  Extract an id or description
+            UInt32 itemId;
+            if (UInt32.TryParse(x, out itemId))
+            {
+                //  It's a task id
+                newItem = ItemGroup.Items.getItemById(itemId);
+                //  Assume newItem isn't null because we checked above
+            }
+            else
+            {
+                //  Createa a new item based on description and add it to the item group
+                newItem = new Item(ItemGroup.allocateId(), x);
+                addItem(newItem);
+            }
+
+            return newItem;
+        }
+
+        //  Returns -1 if ieverything is good.
+        //  Returns index of invalid id otherwise
+        int argListContainsUnknownIds(string[] args, int idx)
+        {
+            //  Test to make sure all the numbers appearing are known item ids
+            int startIdx = idx;
+            for (int i = startIdx; i < args.Length; i++)
+            {
+                //  Extract an id or description
+                UInt32 itemId;
+                if (UInt32.TryParse(args[i], out itemId))
+                {
+                    //  It's a task id
+                    var newItem = ItemGroup.Items.getItemById(itemId);
+                    if (newItem == null)
+                    {
+                        return i;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+
+        void parseChainCommand(string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                Console.WriteLine("Expected a sequence of item numbers or new item descriptions.");
+                displayChainCommandInstructions();
+                return;
+            }
+
+            var badIdx = argListContainsUnknownIds(args, idx);
+            if (badIdx != -1)
+            {
+                Console.WriteLine("The number " + args[badIdx] + " is not a valid item id.  No tasks/dependencies created.");
+                return;
+            }
+
+            //  Things look good, make a list of all the items to be chained
+            List<Item> itemsToChain = new List<Item>();
+            var startIdx = idx;
+            for (int i = startIdx; i < args.Length; i++)
+            {
+                Item newItem = createOrGetItemFromIdOrString(args[i]);
+                itemsToChain.Add(newItem);
+            }
+
+            //  Chain dependencies
+            for (int i=0; i < itemsToChain.Count - 1; i++)
+            {
+                addDependency(itemsToChain[i], itemsToChain[i + 1]);
+            }
+                
+
+            this.ItemGroupFile.save();
+            Console.WriteLine("Chain complete");
+        }
+
+        void displayChainCommandInstructions()
+        {
+            Console.WriteLine("Command: chain");
+            Console.WriteLine("Syntax: guru chain [item id | new item description]*");
+            Console.WriteLine("Makes each item dependent on its successor.");
+        }
+
+        #endregion
+
+        #region Group
+
+        void parseGroupCommand(string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                Console.WriteLine("Expected a sequence of item numbers or new item descriptions.");
+                displayGroupCommandInstructions();
+                return;
+            }
+
+            var badIdx = argListContainsUnknownIds(args, idx);
+            if (badIdx != -1)
+            {
+                Console.WriteLine("The number " + args[badIdx] + " is not a valid item id.  No tasks/dependencies created.");
+                return;
+            }
+
+            //  Things look good, make a list of all the items to be chained
+            var firstItem = createOrGetItemFromIdOrString(args[idx]);
+            List<Item> subItems = new List<Item>();
+            var startIdx = idx + 1;
+            for (int i = startIdx; i < args.Length; i++)
+            {
+                Item newItem = createOrGetItemFromIdOrString(args[i]);
+                subItems.Add(newItem);
+            }
+
+            //  Add dependencies
+            for (int i = 0; i < subItems.Count; i++)
+            {
+                addDependency(firstItem, subItems[i]);
+            }
+
+            this.ItemGroupFile.save();
+            Console.WriteLine("Grouping complete.");
+        }
+
+        void displayGroupCommandInstructions()
+        {
+            Console.WriteLine("Command: group");
+            Console.WriteLine("Syntax: guru group [item id | new item description]*");
+            Console.WriteLine("Makes the first item dependent all following items.");
+        }
+
+        #endregion
+
+        #region Rename
+
+        void parseRenameCommand(string[] args, ref int idx)
+        {
+            if (args.Length == idx)
+            {
+                Console.WriteLine("rename command format: rename \"new name\".");
+                return;
+            }
+
+            var newName = args[idx];
+            var item = ItemGroup.Items.getTopItem();
+            handleRenameItem(item, newName);
+        }
+
+        void handleRenameItem(Item item, string newName)
+        {
+            item.Description = newName;
+            ItemGroupFile.save();
+        }
+
+        #endregion
+
+        #region Reopen
+
+        void handleReopenMethod(Item item, string[] args, ref int idx)
+        {
+            if (idx != args.Length)
+            {
+                Console.WriteLine("Expected end of command.  Found \"" + args[idx] + "\" instead.");
+                return;
+            }
+
+            handleReopenItem(item);
+        }
+
+
+        void handleReopenItem(Item item)
+        {
+            //  Finish the item
+            ItemGroup.Items.doneItems.Remove(item);
+            item.IsDone = false;
+            ItemGroup.Items.items.Add(item);
+            Console.WriteLine("Reopened item " + item);
+
+            ItemGroupFile.save();
+        }
+
+        #endregion
+
+        #region Done
+
+        void handleDoneMethod(Item item, string[] args, ref int idx)
+        {
+            if (idx != args.Length)
+            {
+                Console.WriteLine("Expected end of command.  Found \"" + args[idx] + "\" instead.");
+                return;
+            }
+            handleDoneItem(item);
+        }
+
+        void handleDoneCommand(string[] args, ref int idx)
+        {
+            var doneItem = ItemGroup.Items.getTopItem();
+            if (doneItem == null)
+            {
+                Console.WriteLine("You said you were done but there are no items to finish!  Add some items first.");
+                return;
+            }
+
+            if (idx != args.Length)
+            {
+                Console.WriteLine("Expected end of command but found \"" + args[idx] + "\" instead.");
+                return;
+            }
+
+            handleDoneItem(doneItem);
+            handleNextItem();
+        }
+
+        void handleDoneItem(Item doneItem)
+        {
+            //  Finish the item
+            ItemGroup.Items.items.Remove(doneItem);
+            doneItem.IsDone = true;
+            ItemGroup.Items.doneItems.Add(doneItem);
+            Console.WriteLine("Completed item " + doneItem);
+
+            ItemGroupFile.save();
+        }
+        #endregion
+
+        #region Skip
+
+        void handleSkipCommand(string[] args, ref int idx)
+        {
             var item = ItemGroup.Items.getTopItem();
 
             Console.WriteLine("So you want to skip " + item);
@@ -146,7 +807,8 @@ namespace Guru
                     "I'm not in the mood.",
                     "I'm procrastinating",
                     "Something else needs to be done first.",
-                    "The item is too complicated."
+                    "The item is too complicated.",
+                    "There are more important things to do."
                 }
                 );
 
@@ -163,6 +825,9 @@ namespace Guru
                     break;
                 case 3:
                     handleItemTooComplicated(item);
+                    break;
+                case 4:
+                    handleLowPriority(item);
                     break;
             }
         }
@@ -242,7 +907,7 @@ namespace Guru
         void handleItemTooComplicated(Item item)
         {
             Console.WriteLine("Let's break up this item into smaller peices.");
-            Console.WriteLine("Enter an item number to make it a sub-item, use an 'add' to add a bu-item, ? to search, or 'q' to quit.");
+            Console.WriteLine("Enter an item number to make it a sub-item, use 'add' to create a new a sub-item, ? to search, or 'q' to quit.");
 
             bool didAddSubtask = false;
 
@@ -309,37 +974,15 @@ namespace Guru
 
         }
 
-
-        int getUserInputFromNumericalMenu(string[] options)
+        void handleLowPriority(Item item)
         {
-            for (int i = 0; i < options.Length; i++)
-            {
-                Console.WriteLine(i + "\t" + options[i]);
-            }
-
-            int result = -1;
-            do {
-                Console.Write(kMenuPromptSymbol);
-                var input = Console.ReadLine();
-                try
-                {
-                    result = (int) UInt32.Parse(input);
-                    if (result < 0 || result >= options.Length)
-                        throw new Exception(); // force us through the same code path as catch block
-
-                    //  Yay something to return!
-                    return result;
-                }
-                catch
-                {
-                    Console.WriteLine("Select an option by typing a number 0..." + (options.Length-1) + ".");
-                    continue;
-                }
-
-            }
-            while (true) ;
 
         }
+
+
+        #endregion
+
+        #region Tree
 
         void parseTreeCommand(string[] args, ref int idx)
         {
@@ -366,6 +1009,9 @@ namespace Guru
             }
         }
 
+        #endregion
+
+        #region List
 
         void parseListCommand(string[] args, ref int idx)
         {
@@ -406,402 +1052,7 @@ namespace Guru
             }
         }
 
-
-
-        void handleDoneCommand(string[] args, ref int idx)
-        {
-            var doneItem = ItemGroup.Items.getTopItem();
-            if (doneItem == null)
-            {
-                Console.WriteLine("You said you were done but there are no items to finish!  Add some items first.");
-                return;
-            }
-
-            if (idx != args.Length)
-            {
-                Console.WriteLine("Expected end of command but found \"" + args[idx] + "\" instead.");
-                return;
-            }
-
-            handleDoneItem(doneItem);
-            handleNextItem();
-        }
-
-        void handleDoneItem(Item doneItem)
-        {
-            //  Finish the item
-            ItemGroup.Items.items.Remove(doneItem);
-            doneItem.IsDone = true;
-            ItemGroup.Items.doneItems.Add(doneItem);
-            Console.WriteLine("Completed item " + doneItem);
-
-            ItemGroupFile.save();
-        }
-
-        void handleReopenItem(Item item)
-        {
-            //  Finish the item
-            ItemGroup.Items.doneItems.Remove(item);
-            item.IsDone = false;
-            ItemGroup.Items.items.Add(item);
-            Console.WriteLine("Reopened item " + item);
-
-            ItemGroupFile.save();
-        }
-
-        void handleQuery(string queryString, string[] args, ref int idx)
-		{
-            queryString = queryString.Substring(1);
-
-			//	No args = print everything
-			if (idx >= args.Length) {
-				printAllItems();
-				return;
-			}
-					
-			if (queryString == "") {
-				//	Interpret next string as regular expression
-				var regexStr = args[idx];
-				var regex = new Regex(regexStr);
-				var matchingItems = ItemGroup.Items.findItemsWithDescriptionMatchingRegex( regex );
-				consoleWriteHeader("Items with descriptions matching \"" + regexStr + "\"");
-				foreach (var item in matchingItems) {
-					Console.WriteLine(item);
-				}
-			}
-			else {
-				Console.WriteLine("Unsupported query.");
-			}
-		}
-
-        void handleCommentCommand(string[] args, ref int idx)
-        {
-            if (args.Length == idx)
-            {
-                Console.WriteLine("Comment command has format: comment \"comment text\"");
-                return;
-            }
-
-            var comment = args[idx];
-            var item = ItemGroup.Items.getTopItem();
-            handleCommentOnItem(item, comment);
-        }
-
-        void handleCommentOnItem(Item item, string comment)
-        {
-            item.Details += comment + System.Environment.NewLine;
-            ItemGroupFile.save();
-            Console.WriteLine("Added a comment to " + item);
-        }
-
-
-            void handleMethodOnItem(Item item, string[] args, ref int idx)
-		{
-			if (args.Length <= idx) {
-				Console.WriteLine(item.ToDetailedString());
-				return;
-			}
-			
-			switch (args[idx]) {
-				case "dep": {
-					idx++;
-					handleDepMethod(item, args, ref idx);
-					return;
-				}
-                case "rmdep":
-                    {
-                        idx++;
-                        handleRmdepMethod(item, args, ref idx);
-                        return;
-                    }
-                case "done":
-                {
-                    idx++;
-                    handleDoneMethod(item, args, ref idx);
-                    return;
-                }
-                case "reopen":
-                {
-                    idx++;
-                    handleReopenMethod(item, args, ref idx);
-                    return;
-                }
-				default: {
-					Console.WriteLine("Unrecognized item method '" + args[idx] + "'.");
-					return;
-				}
-			}
-		}
-
-        void handleReopenMethod(Item item, string[] args, ref int idx)
-        {
-            if (idx != args.Length)
-            {
-                Console.WriteLine("Expected end of command.  Found \"" + args[idx] + "\" instead.");
-                return;
-            }
-
-            handleReopenItem(item);
-        }
-
-        void handleDoneMethod(Item item, string[] args, ref int idx)
-        {
-            if (idx != args.Length)
-            {
-                Console.WriteLine("Expected end of command.  Found \"" + args[idx] + "\" instead.");
-                return;
-            }
-            handleDoneItem(item);
-        }
-
-
-        void handleDepMethod(Item item, string[] args, ref int idx)
-		{
-			if (args.Length <= idx) {
-				printDepMethodErrorMessage();
-				return;
-			}	
-			
-			try {
-				var id = UInt64.Parse( args[idx] );
-				var item2 = ItemGroup.getItemById( id );
-                try
-                {
-                    ItemGroup.Items.addDependency(item, item2);
-                }
-                catch (CircularDependencyException ex) {
-                    Console.WriteLine("Making " + item.Id + " dependent on " + item2.Id + " would create a circular dependency.");
-                    return;
-                }
-
-                ItemGroupFile.save();
-                printAddDepMethodMessage(item, item2);
-				return;
-			}
-			catch {
-				printDepMethodErrorMessage();
-				return;
-			}
-		}
-
-        void handleRmdepMethod(Item item, string[] args, ref int idx)
-        {
-            if (args.Length <= idx)
-            {
-                printNodepMethodErrorMessage();
-                return;
-            }
-
-            try
-            {
-                var id = UInt64.Parse(args[idx]);
-                var item2 = ItemGroup.getItemById(id);
-                var didRemove = ItemGroup.Items.removeDependency(item, item2);
-                if (didRemove)
-                    Console.WriteLine("Item #" + item.Id + " is no longer dependent on item #" + item2.Id + ".");
-                else
-                    Console.WriteLine("Item #" + item.Id + " was not dependent on item #" + item2.Id + ".");
-
-                ItemGroupFile.save();
-                return;
-            }
-            catch
-            {
-                printNodepMethodErrorMessage();
-                return;
-            }
-        }
-        void printAddDepMethodMessage(Item item1, Item item2)
-        {
-            Console.WriteLine("Item #" + item1.Id + " is now dependent on item #" + item2.Id + ".");
-        }
-
-        void printDepMethodErrorMessage()
-		{
-			Console.WriteLine("Example: guru 1 dep 2");
-		}
-
-        void printNodepMethodErrorMessage()
-        {
-            Console.WriteLine("Example: guru 1 rmdep 2");
-        }
-
-        void handleEmptyArgs()
-		{
-			//	Load it
-			var groupFile = ItemGroupFile;
-			
-			if (ItemGroupFileIsNew) {
-				printHelp();
-                ItemGroupFileIsNew = false;
-			}
-			else {
-				int idx = 0;
-				parseNextCommand(new string[0], ref idx);
-			}
-		}
-		
-		void printHelp()
-		{
-			consoleWriteHeader("guru Help");
-			displayAddCommandInstructions();
-		}
-		
-		
-		
-		void consoleWriteHeader(string header) {
-			Console.WriteLine("--- " + header + " ---");
-		}
-		
-		void enterPromptLoop()
-        {
-            string command;
-            while (true)
-            {
-                Console.WriteLine();
-                Console.Write(kPromptSymbol);
-                command = Console.ReadLine();
-                if (command == "quit" || command == "q")
-                    return;
-
-                //  Split the command up just like the shell would do and pass it to the argument parser
-                string[] splitCommand = CommandLineStringSplitter.SplitCommandLine(command).ToArray();
-                parseArgs(splitCommand);
-            }
-        }
-
-
-
-        #region Default Item Group
-
-        ItemGroup ItemGroup {
-			get {
-				return ItemGroupFile.ItemGroup;				
-			}
-		}
-		
-		bool ItemGroupFileIsNew = false;
-		private ItemGroupFile _itemGroupFile;
-		ItemGroupFile ItemGroupFile {
-			get {
-				if (_itemGroupFile == null) {
-					if (File.Exists(DefaultItemGroupFilePath)) {					
-						_itemGroupFile = ItemGroupFile.new_ReadFromPath(DefaultItemGroupFilePath);
-						ItemGroupFileIsNew = false;
-					}
-					else {
-						_itemGroupFile = ItemGroupFile.new_CreateAtPath(DefaultItemGroupFilePath);
-						ItemGroupFileIsNew = true;
-					}
-				}
-				return _itemGroupFile;
-			}
-		}
-
-		#endregion
-
-
-
-
-		#region next command
-		
-		void parseNextCommand(string[] args, ref int idx)
-		{
-            handleNextItem();
-        }
-
-        void handleNextItem()
-        {
-            var nextItem = ItemGroup.Items.getTopItem();
-            if (nextItem != null)
-            {
-                consoleWriteHeader("Next Item");
-                Console.WriteLine(nextItem.ToDetailedString());
-            }
-            else
-            {
-                //	There's no task to do!
-                if (ItemGroup.Items.ItemCount == 0)
-                {
-                    if (ItemGroup.Items.DoneItemCount == 0)
-                    {
-                        Console.WriteLine("There are no pending items.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("There are no pending items.  All items are done.");
-                    }
-                }
-                else
-                {
-                    //	There are pending items but they're not "free" which means
-                    //	they're tied up in circular dependency.
-                    Console.WriteLine("All pending items have unresolved dependencies.");
-                }
-                return;
-            }
-        }
-
         #endregion
-
-
-        
-        void parseRemoveCommand(string[] args, ref int idx)
-        {
-            var item = ItemGroup.Items.getTopItem();
-
-            this.ItemGroupFile.save();
-            Console.WriteLine("Removed item " + item);
-            return;
-        }
-
-
-        #region add command
-
-        Item parseAddCommand(string[] args, ref int idx)
-		{
-			if (args.Length <= idx) {
-				Console.WriteLine("Expected description.");
-				displayAddCommandInstructions();
-                return null;
-			}
-			var description = args[ idx++ ];
-			
-			var newId = ItemGroup.allocateId();
-			var item = new Item( newId, description );
-			
-			ItemGroup.Items.addItem( item );
-			this.ItemGroupFile.save();
-			Console.WriteLine("Added item " + item);
-            return item;
-		}
-		
-		void displayAddCommandInstructions()
-		{
-			Console.WriteLine("Command: 'add'");
-			Console.WriteLine("Example: guru add \"Task description\"");
-		}
-
-        #endregion
-
-        void parseRenameCommand(string[] args, ref int idx)
-        {
-            if (args.Length == idx)
-            {
-                Console.WriteLine("rename command format: rename \"new name\".");
-                return;
-            }
-
-            var newName = args[idx];
-            var item = ItemGroup.Items.getTopItem();
-            handleRenameItem(item, newName);
-        }
-
-        void handleRenameItem(Item item, string newName)
-        {
-            item.Description = newName;
-            ItemGroupFile.save();
-        }
 
     }
 }

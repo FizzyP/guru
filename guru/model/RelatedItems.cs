@@ -272,20 +272,6 @@ namespace Guru
 			}
 			return matches;
 		}
-		
-		
-		public void HashSetsOnDeserialization()
-		{
-			items.OnDeserialization(this);
-			doneItems.OnDeserialization(this);
-			dependencyMap.OnDeserialization(this);
-			Console.WriteLine("dependencyMap " + dependencyMap.Count());
-			foreach (var kv in dependencyMap) {
-				Console.WriteLine("this");
-				kv.Value.OnDeserialization(this);
-			}
-		}
-		
 	}
 
     class CircularDependencyException : Exception

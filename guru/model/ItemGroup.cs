@@ -31,11 +31,6 @@ namespace Guru
 		{
 			return Items.getItemById(id);
 		}
-		
-		public void HashSetsOnDeserialization()
-		{
-			Items.HashSetsOnDeserialization();
-		}
 	}
 }
 
