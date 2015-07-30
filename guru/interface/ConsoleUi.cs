@@ -501,25 +501,44 @@ namespace Guru
 
         void parseRemoveCommand(string[] args, ref int idx)
         {
-            //var item = ItemGroup.Items.getTopItem();
+            var item = ItemGroup.Items.getTopItem();
 
-            ////  Look for dependencies on this item
-            //var itemsDependentOnThis = new
-            //foreach (var kv in ItemGroup.Items.dependencyMap)
-            //{
-            //    foreach (var i in kv.Value)
-            //    {
-            //        if (i == item)
-            //        {
-            //            Console.WriteLine()
-            //        }
-            //    }
-            //}
+            bool forceRemoveDependencies = false;
 
-            //this.ItemGroupFile.save();
-            //Console.WriteLine("Removed item " + item);
-            //return;
+            //  Look for dependencies on this item
+            var deps = ItemGroup.Items.getDependents(item);
+            if (deps.Count != 0)
+            {
+                consoleWriteHeader("The following items are dependent on the one you want to remove");
+                foreach (var i in deps)
+                    Console.WriteLine(i);
+                consoleWriteHeader("What do you want to do?")
+                var resultIdx = getUserInputFromNumericalMenu(
+                    new string[]
+                    {
+                        "Remove the dependencies",
+                        "Cancel"
+                    }
+                    );
+
+                switch (resultIdx)
+                {
+                    case 0:
+                        forceRemoveDependencies = true;
+                        break;
+
+                    case 1:
+                        return;
+                }
+
+
+                ItemGroup.Items.removeItem(item, forceRemoveDependencies);
+
+                ItemGroupFile.save();
+                Console.WriteLine("Removed item " + item);
+            }
         }
+
 #endregion
 
         #region Add
@@ -985,7 +1004,7 @@ namespace Guru
                     {
                     "Trust Me",
                     "I'm just procrastinating",
-                    "I'm never going to do this"
+                    "I'm never going to do this, remove it"
                     }
                     );
 

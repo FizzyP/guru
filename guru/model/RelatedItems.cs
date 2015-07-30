@@ -120,6 +120,55 @@ namespace Guru
 			itemByIdMap.Add(item.Id, item);
 		}
 
+        public void removeItem(Item item, bool removeDependents = false)
+        {
+            var deps = getDependents(item);
+            if (deps.Count != 0)
+            {
+                if (removeDependents)
+                {
+                    foreach (var dep in deps)
+                        dependencyMap[dep].Remove(item);
+                }
+                else
+                {
+                    throw new Exception("Cannot remove item when other items are dependent on it.");
+                }
+            }
+
+            if (items.Contains(item))
+            {
+                items.Remove(item);
+            }
+            else if (doneItems.Contains(item))
+            {
+                items.Remove(item);
+            }
+
+            if (dependencyMap.ContainsKey(item))
+                dependencyMap.Remove(item);
+
+            if (itemByIdMap.ContainsKey(item.Id))
+                itemByIdMap.Remove(item.Id);
+        }
+
+        public List<Item> getDependents(Item item)
+        {
+            var deps = new List<Item>();
+
+            //  Find items that are dependent on this one
+            foreach (var kv in dependencyMap)
+            {
+                if (kv.Value.Contains(item))
+                {
+                    deps.Add(kv.Key);
+                }
+            }
+
+            return deps;
+        }
+
+
         //  Returns true of there is a chain of dependencies
         //  item1 on A on B on C on ... on Z on item2
         public bool itemIsTransitivelyDependent(Item item1, Item item2)
