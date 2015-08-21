@@ -167,8 +167,60 @@ namespace Guru
 				parseNextCommand(new string[0], ref idx);
 			}
 		}
-		
-   
+
+
+        #region Methods
+
+        void handleMethodOnItem(Item item, string[] args, ref int idx)
+        {
+            if (args.Length <= idx)
+            {
+                Console.WriteLine(item.ToDetailedString());
+                return;
+            }
+
+            switch (args[idx])
+            {
+                case "dep":
+                    {
+                        idx++;
+                        handleDepMethod(item, args, ref idx);
+                        return;
+                    }
+                case "rmdep":
+                    {
+                        idx++;
+                        handleRmdepMethod(item, args, ref idx);
+                        return;
+                    }
+                case "done":
+                    {
+                        idx++;
+                        handleDoneMethod(item, args, ref idx);
+                        return;
+                    }
+                case "reopen":
+                    {
+                        idx++;
+                        handleReopenMethod(item, args, ref idx);
+                        return;
+                    }
+                case "remove":
+                case "rm":
+                    {
+                        idx++;
+                        handleRemoveMethod(item, args, ref idx);
+                        return;
+                    }
+                default:
+                    {
+                        Console.WriteLine("Unrecognized item method '" + args[idx] + "'.");
+                        return;
+                    }
+            }
+        }
+
+        #endregion
 
         #region Default Item Group
 
@@ -307,48 +359,6 @@ namespace Guru
             Console.WriteLine("Added a comment to " + item);
         }
 
-
-        void handleMethodOnItem(Item item, string[] args, ref int idx)
-        {
-            if (args.Length <= idx)
-            {
-                Console.WriteLine(item.ToDetailedString());
-                return;
-            }
-
-            switch (args[idx])
-            {
-                case "dep":
-                    {
-                        idx++;
-                        handleDepMethod(item, args, ref idx);
-                        return;
-                    }
-                case "rmdep":
-                    {
-                        idx++;
-                        handleRmdepMethod(item, args, ref idx);
-                        return;
-                    }
-                case "done":
-                    {
-                        idx++;
-                        handleDoneMethod(item, args, ref idx);
-                        return;
-                    }
-                case "reopen":
-                    {
-                        idx++;
-                        handleReopenMethod(item, args, ref idx);
-                        return;
-                    }
-                default:
-                    {
-                        Console.WriteLine("Unrecognized item method '" + args[idx] + "'.");
-                        return;
-                    }
-            }
-        }
 
         #endregion
 
@@ -502,7 +512,11 @@ namespace Guru
         void parseRemoveCommand(string[] args, ref int idx)
         {
             var item = ItemGroup.Items.getTopItem();
+            removeItem(item);
+        }
 
+        void removeItem(Item item)
+        {
             bool forceRemoveDependencies = false;
 
             //  Look for dependencies on this item
@@ -512,7 +526,7 @@ namespace Guru
                 consoleWriteHeader("The following items are dependent on the one you want to remove");
                 foreach (var i in deps)
                     Console.WriteLine(i);
-                consoleWriteHeader("What do you want to do?")
+                consoleWriteHeader("What do you want to do?");
                 var resultIdx = getUserInputFromNumericalMenu(
                     new string[]
                     {
@@ -530,16 +544,20 @@ namespace Guru
                     case 1:
                         return;
                 }
-
-
-                ItemGroup.Items.removeItem(item, forceRemoveDependencies);
-
-                ItemGroupFile.save();
-                Console.WriteLine("Removed item " + item);
             }
+
+            ItemGroup.Items.removeItem(item, forceRemoveDependencies);
+
+            ItemGroupFile.save();
+            Console.WriteLine("Removed item " + item);
         }
 
-#endregion
+        void handleRemoveMethod(Item item, string[] args, ref int idx)
+        {
+            removeItem(item);
+        }
+
+        #endregion
 
         #region Add
 

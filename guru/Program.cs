@@ -10,7 +10,7 @@ namespace Guru
     {
         static void Main(string[] args)
         {
-            args = new string[] { "prompt" };
+//            args = new string[] { "prompt" };
 
             var ui = new ConsoleUi();
             ui.parseArgs(args);
